@@ -3,6 +3,7 @@ from mcp.server.fastmcp import FastMCP
 # Tools
 from gmail_config import init_gmail_service, CREDENTIALS_PATH
 from Tools.ReadThreads import main as read_threads
+from Tools.SendEmails.main import send_email
 
 mcp = FastMCP("gmail-mcp")
 
@@ -23,24 +24,25 @@ async def previsualizar_hilos(
                 'subject:urgente', o palabras clave generales. Por defecto es None (devuelve todo).
             max_results: Número máximo de hilos de correo a recuperar. Por defecto es 10.
         Returns:
-            dict: Un diccionario con la estructura {"hilos": [list]}, donde cada elemento contiene:
+            dict: Un diccionario donde cada elemento contiene:
                 - Thread_id: Identificador único del hilo (necesario para obtener el detalle completo).
                 - Asunto: El asunto del hilo.
                 - N. mensajes: Cantidad total de mensajes en el hilo.
                 - Participantes: Lista de correos electrónicos de los remitentes y destinatarios.
-                - Snippets: Resúmenes de los mensajes del hilo.
-    """    
+                - Snippets: Resúmenes de los mensajes del hilo."""    
 
-    threads = read_threads.get_email_threads(service = service, q = q, max_results = max_results)
-    data = read_threads.preview_threads(service, threads)
-    return {"hilos": data}
+    try:
+        threads = read_threads.get_email_threads(service = service, q = q, max_results = max_results)
+        data = read_threads.preview_threads(service, threads)
+        return {"hilos": data}
+    except Exception as e:
+        return {"error": str(e)}
 
 @mcp.tool()
 async def obtener_hilo_completo(
     thread_id: str
 ) -> dict:
-    """
-    Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail.
+    """Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail.
 
     Args:
         thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos").
@@ -56,13 +58,50 @@ async def obtener_hilo_completo(
                 - Fecha: Fecha de envío.
                 - Contenido: Cuerpo del mensaje limpio.
                 - Tiene archivos: True si el mensaje incluye adjuntos.
-                - Etiquetas: Etiquetas de Gmail aplicadas al mensaje.
-    """
+                - Etiquetas: Etiquetas de Gmail aplicadas al mensaje."""
     
-    data = read_threads.get_thread_details(service, thread_id)
-    return {"hilo": data}
+    try:
+        data = read_threads.get_thread_details(service, thread_id)
+        return {"hilo": data}
+    except Exception as e:
+        return {"error": str(e)}
 ### LECTURA DE EMAILS ###
 #########################
+
+
+### ENVIO DE EMAILS ###
+#########################
+
+@mcp.tool(confirmation=True)
+async def enviar_email(
+    destinatario: str,
+    asunto: str,
+    cuerpo: str
+) -> dict:
+    """Envía un correo electrónico a través de Gmail.  
+    
+    Args:
+        destinatario: Dirección de correo electrónico completa del receptor.
+        asunto: El título o línea de asunto del correo.
+        cuerpo: El contenido textual del mensaje.
+        
+    Returns:
+        dict: Un diccionario con el status del envío"""
+    
+    try:
+        status = send_email(
+            service = service,
+            to = destinatario,
+            subject = asunto,
+            body = cuerpo
+        )
+        return {"status": status}
+    except Exception as e:
+        return {"error": str(e)}
+### ENVIO DE EMAILS ###
+#########################
+
+
 
 def main():
     mcp.run(transport="streamable-http")
