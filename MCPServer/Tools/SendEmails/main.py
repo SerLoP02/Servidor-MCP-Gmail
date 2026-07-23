@@ -1,4 +1,4 @@
-from gmail_config import init_gmail_service, logger
+from gmail_config import logger
 from googleapiclient.discovery import Resource
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText

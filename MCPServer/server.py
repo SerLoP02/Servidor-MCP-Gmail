@@ -4,6 +4,7 @@ from mcp.server.fastmcp import FastMCP
 from gmail_config import init_gmail_service, CREDENTIALS_PATH
 from Tools.ReadThreads import main as read_threads
 from Tools.SendEmails.main import send_email
+from Tools.ReplyEmails import main as reply_emails
 
 mcp = FastMCP("gmail-mcp")
 
@@ -71,8 +72,7 @@ async def obtener_hilo_completo(
 
 ### ENVIO DE EMAILS ###
 #########################
-
-@mcp.tool(confirmation=True)
+@mcp.tool()
 async def enviar_email(
     destinatario: str,
     asunto: str,
@@ -100,6 +100,35 @@ async def enviar_email(
         return {"error": str(e)}
 ### ENVIO DE EMAILS ###
 #########################
+
+### RESUPUESTA A EMAILS ###
+############################
+@mcp.tool()
+async def responder_email(
+    thread_id: str,
+    cuerpo: str
+) -> dict:
+    """Responde a un hilo de correo existente en Gmail.
+
+    Args:
+        thread_id: El identificador único del hilo al que se desea responder (obtenido previamente mediante "previsualizar_hilos").
+        cuerpo: El contenido textual del mensaje de respuesta.
+
+    Returns:
+        dict: Un diccionario con el status del envío.
+    """
+
+    try:
+        message_details = reply_emails.get_message_headers_RFC(service, thread_id)
+        status = reply_emails.reply_email(
+            service = service,
+            body = cuerpo,
+            thread_id = thread_id,
+            **message_details
+        )
+        return {"status": status}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 
