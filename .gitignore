@@ -12,3 +12,6 @@ wheels/
 # Credenciales y Token generado
 /MCPServer/credentials.json
 /MCPServer/token.json
+
+# Carpeta para pruebas
+pruebas

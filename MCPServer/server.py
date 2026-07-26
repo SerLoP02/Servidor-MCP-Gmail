@@ -5,6 +5,7 @@ from gmail_config import init_gmail_service, CREDENTIALS_PATH
 from Tools.ReadThreads import main as read_threads
 from Tools.SendEmails.main import send_email
 from Tools.ReplyEmails import main as reply_emails
+from Tools.Labels.main import get_label_ids
 
 mcp = FastMCP("gmail-mcp")
 
@@ -17,20 +18,19 @@ async def previsualizar_hilos(
     q: str | None = None, 
     max_results: int = 10
 ) -> dict:
-    """Busca y previsualiza hilos de correo en Gmail. Ideal para buscar correos específicos antes de leer su contenido completo.
+    """Busca y previsualiza hilos de correo en Gmail. Ideal para buscar correos específicos antes de leer su contenido completo
 
         Args:
-            q: Cadena de texto para filtrar correos usando la sintaxis exacta 
-                de búsqueda de Gmail. Puedes usar operadores como 'from:user@example.com', 'is:unread', 
-                'subject:urgente', o palabras clave generales. Por defecto es None (devuelve todo).
-            max_results: Número máximo de hilos de correo a recuperar. Por defecto es 10.
+            q: Cadena de texto para filtrar correos usando la sintaxis exacta de búsqueda de Gmail. Puedes usar operadores como 'from:user@example.com', 'is:unread', 'subject:urgente', o palabras clave generales. Por defecto es None (devuelve todo)
+            max_results: Número máximo de hilos de correo a recuperar. Por defecto es 10
+
         Returns:
             dict: Un diccionario donde cada elemento contiene:
-                - Thread_id: Identificador único del hilo (necesario para obtener el detalle completo).
-                - Asunto: El asunto del hilo.
-                - N. mensajes: Cantidad total de mensajes en el hilo.
-                - Participantes: Lista de correos electrónicos de los remitentes y destinatarios.
-                - Snippets: Resúmenes de los mensajes del hilo."""    
+                - Thread_id: Identificador único del hilo (necesario para obtener el detalle completo)
+                - Asunto: El asunto del hilo
+                - N. mensajes: Cantidad total de mensajes en el hilo
+                - Participantes: Lista de correos electrónicos de los remitentes y destinatarios
+                - Snippets: Resúmenes de los mensajes del hilo"""    
 
     try:
         threads = read_threads.get_email_threads(service = service, q = q, max_results = max_results)
@@ -43,23 +43,23 @@ async def previsualizar_hilos(
 async def obtener_hilo_completo(
     thread_id: str
 ) -> dict:
-    """Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail.
+    """Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail
 
     Args:
-        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos").
+        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
 
     Returns:
         dict: Un diccionario con la estructura detallada del hilo:
-            - Thread_id: ID del hilo.
-            - Asunto: Asunto del hilo.
+            - Thread_id: ID del hilo
+            - Asunto: Asunto del hilo
             - Mensajes: Lista de diccionarios, donde cada mensaje contiene:
-                - msg_id: ID único del mensaje.
-                - Remitente: Dirección de email del autor.
-                - Destinatarios: Direcciones de email de los destinatarios.
-                - Fecha: Fecha de envío.
-                - Contenido: Cuerpo del mensaje limpio.
-                - Tiene archivos: True si el mensaje incluye adjuntos.
-                - Etiquetas: Etiquetas de Gmail aplicadas al mensaje."""
+                - msg_id: ID único del mensaje
+                - Remitente: Dirección de email del autor
+                - Destinatarios: Direcciones de email de los destinatarios
+                - Fecha: Fecha de envío
+                - Contenido: Cuerpo del mensaje limpio
+                - Tiene archivos: True si el mensaje incluye adjuntos
+                - Etiquetas: Etiquetas de Gmail aplicadas al mensaje"""
     
     try:
         data = read_threads.get_thread_details(service, thread_id)
@@ -78,12 +78,12 @@ async def enviar_email(
     asunto: str,
     cuerpo: str
 ) -> dict:
-    """Envía un correo electrónico a través de Gmail.  
+    """Envía un correo electrónico a través de Gmail
     
     Args:
-        destinatario: Dirección de correo electrónico completa del receptor.
-        asunto: El título o línea de asunto del correo.
-        cuerpo: El contenido textual del mensaje.
+        destinatario: Dirección de correo electrónico completa del receptor
+        asunto: El título o línea de asunto del correo
+        cuerpo: El contenido textual del mensaje
         
     Returns:
         dict: Un diccionario con el status del envío"""
@@ -108,14 +108,14 @@ async def responder_email(
     thread_id: str,
     cuerpo: str
 ) -> dict:
-    """Responde a un hilo de correo existente en Gmail.
+    """Responde a un hilo de correo existente en Gmail
 
     Args:
-        thread_id: El identificador único del hilo al que se desea responder (obtenido previamente mediante "previsualizar_hilos").
-        cuerpo: El contenido textual del mensaje de respuesta.
+        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
+        cuerpo: El contenido textual del mensaje de respuesta
 
     Returns:
-        dict: Un diccionario con el status del envío.
+        dict: Un diccionario con el status del envío
     """
 
     try:
@@ -129,8 +129,82 @@ async def responder_email(
         return {"status": status}
     except Exception as e:
         return {"error": str(e)}
+### RESUPUESTA A EMAILS ###
+############################
 
 
+### MANEJO DE ETIQUETAS ###
+############################
+@mcp.tool()
+async def create_label(
+    name: str
+) -> dict:
+    """Crea una etiqueta de Gmail
+    
+    Args:
+        name: Nombre de la etiqueta. 
+    
+    Returns:
+        dict: Un diccionario con el status del envío"""
+
+    try:
+        body = {
+            "name": name
+        }
+        service.users().labels().create(userId="me", body=body).execute()
+        return {"status": "Se ha creado exitosamente la etiqueta"}
+    except Exception as e:
+        return {"error": f"Se ha producido el siguiente error al crear la etiqueta {name}: {str(e)}"}   
+
+@mcp.tool()
+async def move_to_labels(
+    thread_id: str,
+    labels: list
+) -> dict:
+    """Añade una o varias etiquetas a un hilo de conversación de Gmail específico
+    
+    Args:
+        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
+        labels: Lista con los nombres de las etiquetas. Los nombres no distinguen entre minúsculas y mayúsculas
+        
+    Returns:
+        dict: Un diccionario con el status del proceso"""
+
+    try:
+        label_ids = get_label_ids(service, labels)
+        body = {
+            "addLabelIds": label_ids
+        }
+        service.users().threads().modify(userId="me", id = thread_id, body = body).execute()
+        return {"status": "Se ha movido exitosamente el hilo a la etiqueta"}
+    except Exception as e:
+        return {"error": f"Se ha producido el siguiente error: {str(e)}"}
+
+@mcp.tool()
+async def remove_labels(
+    thread_id: str,
+    labels: list
+) -> dict:
+    """Quita una o varias etiquetas a un hilo de conversación de Gmail específico
+    
+    Args:
+        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
+        labels: Lista con los nombres de las etiquetas. Los nombres no distinguen entre minúsculas y mayúsculas
+        
+    Returns:
+        dict: Un diccionario con el status del proceso"""
+
+    try:
+        label_ids = get_label_ids(service, labels)
+        body = {
+            "removeLabelIds": label_ids
+        }
+        service.users().threads().modify(userId="me", id = thread_id, body = body).execute()
+        return {"status": f"Se eliminado exitosamente el hilo de la etiqueta"}
+    except Exception as e:
+        return {"error": f"Se ha producido el siguiente error: {str(e)}"}
+### MANEJO DE ETIQUETAS ###
+############################
 
 def main():
     mcp.run(transport="streamable-http")
