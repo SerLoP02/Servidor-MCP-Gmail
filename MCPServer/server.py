@@ -1,5 +1,8 @@
 from mcp.server.fastmcp import FastMCP
 
+from typing import Annotated
+from pydantic import Field
+
 # Tools
 from gmail_config import init_gmail_service, CREDENTIALS_PATH
 from Tools.ReadThreads import main as read_threads
@@ -11,18 +14,15 @@ mcp = FastMCP("gmail-mcp")
 
 service = init_gmail_service(CREDENTIALS_PATH)
 
+
 ### LECTURA DE EMAILS ###
 #########################
 @mcp.tool()
 async def previsualizar_hilos(
-    q: str | None = None, 
-    max_results: int = 10
+    q: Annotated[str | None, Field(default=None, description="Consulta de búsqueda usando el formato nativo de Gmail. Por defecto es None (devuelve todo)", examples=["from:user@example.com is:unread", "<palabras clave> subject:urgente"])], 
+    max_results: Annotated[int, Field(default=10, description="Número máximo de hilos de correo a recuperar. Debe estar entre 1 y 100", ge=1, le=100)]
 ) -> dict:
     """Busca y previsualiza hilos de correo en Gmail. Ideal para buscar correos específicos antes de leer su contenido completo
-
-        Args:
-            q: Cadena de texto para filtrar correos usando la sintaxis exacta de búsqueda de Gmail. Puedes usar operadores como 'from:user@example.com', 'is:unread', 'subject:urgente', o palabras clave generales. Por defecto es None (devuelve todo)
-            max_results: Número máximo de hilos de correo a recuperar. Por defecto es 10
 
         Returns:
             dict: Un diccionario donde cada elemento contiene:
@@ -41,12 +41,9 @@ async def previsualizar_hilos(
 
 @mcp.tool()
 async def obtener_hilo_completo(
-    thread_id: str
+    thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")]
 ) -> dict:
-    """Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail
-
-    Args:
-        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
+    """Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail 
 
     Returns:
         dict: Un diccionario con la estructura detallada del hilo:
@@ -74,16 +71,11 @@ async def obtener_hilo_completo(
 #########################
 @mcp.tool()
 async def enviar_email(
-    destinatario: str,
-    asunto: str,
-    cuerpo: str
+    destinatario: Annotated[str, Field(description="Dirección de correo electrónico del destinatario")],
+    asunto: Annotated[str, Field(description="Asunto del correo")],
+    cuerpo: Annotated[str, Field(description="Contenido textual del mensaje")]
 ) -> dict:
     """Envía un correo electrónico a través de Gmail
-    
-    Args:
-        destinatario: Dirección de correo electrónico completa del receptor
-        asunto: El título o línea de asunto del correo
-        cuerpo: El contenido textual del mensaje
         
     Returns:
         dict: Un diccionario con el status del envío"""
@@ -105,14 +97,10 @@ async def enviar_email(
 ############################
 @mcp.tool()
 async def responder_email(
-    thread_id: str,
-    cuerpo: str
+    thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")],
+    cuerpo: Annotated[str, Field(description="Contenido textual del mensaje")]
 ) -> dict:
     """Responde a un hilo de correo existente en Gmail
-
-    Args:
-        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
-        cuerpo: El contenido textual del mensaje de respuesta
 
     Returns:
         dict: Un diccionario con el status del envío
@@ -136,14 +124,11 @@ async def responder_email(
 ### MANEJO DE ETIQUETAS ###
 ############################
 @mcp.tool()
-async def create_label(
-    name: str
+async def crear_etiqeta(
+    name: Annotated[str, Field(description="Nombre de la etiqueta")]
 ) -> dict:
     """Crea una etiqueta de Gmail
-    
-    Args:
-        name: Nombre de la etiqueta. 
-    
+
     Returns:
         dict: Un diccionario con el status del envío"""
 
@@ -154,19 +139,31 @@ async def create_label(
         service.users().labels().create(userId="me", body=body).execute()
         return {"status": "Se ha creado exitosamente la etiqueta"}
     except Exception as e:
-        return {"error": f"Se ha producido el siguiente error al crear la etiqueta {name}: {str(e)}"}   
+        return {"error": f"Se ha producido el siguiente error al crear la etiqueta {name}: {str(e)}"}  
 
 @mcp.tool()
-async def move_to_labels(
-    thread_id: str,
-    labels: list
+async def eliminar_etiqueta(
+    name: Annotated[str, Field(description="Nombre de la etiqueta. El nombre no distingue entre minúsculas y mayúsculas")]
+) -> dict:
+    """Elimina una etiqueta de Gmail
+    
+    Returns:
+        dict: Un diccionario con el status del envío"""
+
+    try:
+        label_id = get_label_ids(service, [name])
+        service.users().labels().delete(userId="me", id=label_id)
+        return {"status": "Se ha eliminado exitosamente la etiqueta"}
+    except Exception as e:
+        return {"error": f"Se ha producido el siguiente error al eliminar la etiqueta {name}: {str(e)}"}
+
+@mcp.tool()
+async def asignar_etiquetas_a_hilo(
+    thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")],
+    labels: Annotated[list[str], Field(description="Lista con los nombres de las etiquetas (tanto las por-defecto como las propias del usuario). Los nombres no distinguen entre minúsculas y mayúsculas", examples=[["trash"], ["spam", "starred", "<etiqueta_usuario>"]])]
 ) -> dict:
     """Añade una o varias etiquetas a un hilo de conversación de Gmail específico
-    
-    Args:
-        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
-        labels: Lista con los nombres de las etiquetas. Los nombres no distinguen entre minúsculas y mayúsculas
-        
+
     Returns:
         dict: Un diccionario con el status del proceso"""
 
@@ -181,16 +178,12 @@ async def move_to_labels(
         return {"error": f"Se ha producido el siguiente error: {str(e)}"}
 
 @mcp.tool()
-async def remove_labels(
-    thread_id: str,
-    labels: list
+async def quitar_etiquetas_a_hilo(
+    thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")],
+        labels: Annotated[list[str], Field(description="Lista con los nombres de las etiquetas (tanto las por-defecto como las propias del usuario). Los nombres no distinguen entre minúsculas y mayúsculas", examples=[["unread"], ["spam", "<etiqueda_usuario>"]])]
 ) -> dict:
     """Quita una o varias etiquetas a un hilo de conversación de Gmail específico
-    
-    Args:
-        thread_id: El identificador único del hilo (obtenido previamente mediante "previsualizar_hilos")
-        labels: Lista con los nombres de las etiquetas. Los nombres no distinguen entre minúsculas y mayúsculas
-        
+
     Returns:
         dict: Un diccionario con el status del proceso"""
 
