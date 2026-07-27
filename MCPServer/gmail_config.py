@@ -14,6 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger("GmailMCP")
 
 CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), "credentials.json")
+ATTACHMENTS_PATH = "Attachments"
 
 def create_service(
     client_secret_file: str, 

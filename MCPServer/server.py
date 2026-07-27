@@ -4,11 +4,12 @@ from typing import Annotated
 from pydantic import Field
 
 # Tools
-from gmail_config import init_gmail_service, CREDENTIALS_PATH
+from gmail_config import init_gmail_service, CREDENTIALS_PATH, ATTACHMENTS_PATH
 from Tools.ReadThreads import main as read_threads
 from Tools.SendEmails.main import send_email
 from Tools.ReplyEmails import main as reply_emails
 from Tools.Labels.main import get_label_ids
+from Tools.Attachments.main import download_attachments
 
 mcp = FastMCP("gmail-mcp")
 
@@ -198,6 +199,27 @@ async def quitar_etiquetas_a_hilo(
         return {"error": f"Se ha producido el siguiente error: {str(e)}"}
 ### MANEJO DE ETIQUETAS ###
 ############################
+
+
+### DESCARGA DE ADJUNTOS ###
+############################
+@mcp.tool()
+async def descargar_adjuntos(
+    msg_id: Annotated[str, Field(description="ID del mensaje que contiene los archivos adjuntos")]
+) -> dict:
+    """Descarga todos los archivos adjuntos de un mensaje específico de Gmail
+
+    Returns:
+        dict: Un diccionario con el status del proceso"""
+
+    try:
+        download_attachments(service, msg_id, ATTACHMENTS_PATH)
+        return {"status": "Archivos descargados exitosamente"}
+    except Exception as e:
+        return {"error": f"Se ha producido el siguiente error al descargar los archivos adjuntos: {str(e)}"}
+### DESCARGA DE ADJUNTOS ###
+############################
+
 
 def main():
     mcp.run(transport="streamable-http")
