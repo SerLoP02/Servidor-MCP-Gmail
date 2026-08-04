@@ -28,7 +28,7 @@ def get_message_headers_RFC(
     Returns:
         dict: Un diccionario con las siguientes claves:
             - message_id: El ID del mensaje original (cabecera Message-ID).
-            - to: La dirección de correo del destinatario original.
+            - to: La dirección de correo del primer destinatario distinto al propietario de la cuenta de Gmail.
             - subject: El asunto original del hilo ."""
     
     gmail_owner = service.users().getProfile(userId="me").execute().get("emailAddress")
@@ -65,9 +65,9 @@ def reply_email(
     to: str, 
     subject: str, 
     body: str,
+    thread_id: str,
+    message_id: str,
     attachment_path: list[str] | None = None,
-    thread_id: str | None = None,
-    message_id: str | None = None
 ) -> str:
     """Envía una respuesta a un hilo de correo existente en Gmail con soporte para adjuntos y reintentos automáticos.
 
@@ -78,9 +78,9 @@ def reply_email(
         to (str): Dirección de correo electrónico del destinatario.
         subject (str): El asunto del correo (se antepone 'Re:' automáticamente si corresponde).
         body (str): El contenido textual del mensaje de respuesta.
-        attachment_path (list[str] | None, optional): Lista de rutas locales de archivos a adjuntar. Por defecto es None.
-        thread_id (str | None, optional): El ID del hilo de Gmail al que se vincula la respuesta. Por defecto es None.
-        message_id (str | None, optional): El ID del mensaje original para encadenar las cabeceras RFC. Por defecto es None.
+        thread_id (str): El ID del hilo de Gmail al que se vincula la respuesta. Por defecto es None.
+        message_id (str): El ID del mensaje original para encadenar las cabeceras RFC. Por defecto es None.
+        attachment_path (list[str] | None, optional): Lista con los nombres de los archivos a adjuntar. Por defecto es None.
 
     Returns:
         str: Un mensaje de texto indicando el éxito del envío o describiendo el error detallado tras agotar los intentos."""
@@ -102,7 +102,7 @@ def reply_email(
 
     if attachment_path:
         for attachment in attachment_path:
-            try: 
+            try:
                 filename = os.path.basename(attachment)
                 with open(attachment, "rb") as file:
                     part = MIMEBase("application", "octet-stream")
@@ -114,9 +114,9 @@ def reply_email(
                     )
                     message.attach(part)
             except FileNotFoundError:
-                logger.warning(f"Archivo {filename} no encontrado")
-                continue
-                
+                logger.error(f"El archivo {attachment} no ha sido encontrado", exc_info=True)
+                raise FileNotFoundError(f"El archivo {attachment} no ha sido encontrado")
+                    
     raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
 
     api_body = {"raw": raw_message}
@@ -136,11 +136,8 @@ def reply_email(
             
         except SSLEOFError:
             logger.debug(f"Ha fallado en el intento {i+1} por SSLEOFError")
-            sleep(1)
-            
-        except Exception as e:
-            logger.error(f"Error inesperado al enviar el correo: {e}")
-            return f"Ha habido un problema al enviar el correo: {str(e)}"
-            
-    logger.error("No se pudo enviar el correo tras agotar todos los intentos por fallos de red.")
-    return "No se pudo enviar el correo después de 3 intentos debido a fallos de red."
+            if i < max_retries - 1:
+                sleep(1)
+            else:
+                logger.error("No se puedo enviar el correo tras agotar todos los intentos")
+                raise ConnectionError("No se pudo enviar el correo tras 3 intentos debido a fallos de red SSL")

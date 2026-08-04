@@ -31,23 +31,19 @@ def get_email_threads(
     threads = []
     next_page_token = None
 
-    while True:
-        try:                
-            result = service.users().threads().list(
-                userId = "me",
-                q = q,
-                maxResults = min(500, max_results - len(threads)) if max_results else 500,
-                pageToken = next_page_token
-            ).execute()
+    while True:                
+        result = service.users().threads().list(
+            userId = "me",
+            q = q,
+            maxResults = min(500, max_results - len(threads)) if max_results else 500,
+            pageToken = next_page_token
+        ).execute()
 
-            threads.extend(result.get("threads", []))
+        threads.extend(result.get("threads", []))
 
-            next_page_token = result.get("nextPageToken")
+        next_page_token = result.get("nextPageToken")
 
-            if not next_page_token or (max_results and len(threads) >= max_results):
-                break
-        except Exception as e:
-            logger.error(f"Error al listar hilos de Gmail: {str(e)}", exc_info=True)
+        if not next_page_token or (max_results and len(threads) >= max_results):
             break
 
     resultado = threads[:max_results] if max_results else threads

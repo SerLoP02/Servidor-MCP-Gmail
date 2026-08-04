@@ -6,7 +6,7 @@ from pydantic import Field
 # Tools
 from gmail_config import init_gmail_service, CREDENTIALS_PATH, ATTACHMENTS_PATH
 from Tools.ReadThreads import main as read_threads
-from Tools.ReadThreads.utils import get_email_threads
+from Tools.ReadThreads.utils import get_email_threads, callback_process_threads
 from Tools.SendEmails.main import send_email
 from Tools.ReplyEmails import main as reply_emails
 from Tools.Labels.main import get_label_ids
@@ -23,22 +23,19 @@ service = init_gmail_service(CREDENTIALS_PATH)
 async def previsualizar_hilos(
     q: Annotated[str | None, Field(default=None, description="Consulta de búsqueda usando el formato nativo de Gmail. Por defecto es None (devuelve todo)", examples=["from:user@example.com is:unread", "<palabras clave> subject:urgente"])], 
     max_results: Annotated[int, Field(default=10, description="Número máximo de hilos de correo a recuperar. Debe estar entre 1 y 100", ge=1, le=100)]
-) -> dict:
+) -> list[dict]:
     """Busca y previsualiza hilos de correo en Gmail. Esta herramienta sirve para filtrar entre los correos e identificar los adecuados.
 
         Returns:
-            dict: Un diccionario de lista, donde cada elemento de la lista contiene:
+            List[Dict]: Una lista de diccionarios donde cada diccionario contiene:
                 - Thread_id: El ID del hilo.
                 - Asunto: El asunto del hilo.
                 - Participantes: Participantes del hilo.
                 - Snippets: Snippets de todos los mensajes del hilo."""    
 
-    try:
-        threads = get_email_threads(service = service, q = q, max_results = max_results)
-        data = read_threads.preview_threads(service, threads)
-        return {"hilos": data}
-    except Exception as e:
-        return {"error": str(e)}
+    threads = get_email_threads(service = service, q = q, max_results = max_results)
+    data = read_threads.preview_threads(service, threads, callback_process_threads)
+    return data
 
 @mcp.tool()
 async def leer_hilo_completo(
@@ -50,30 +47,24 @@ async def leer_hilo_completo(
     Returns:
         dict: Diccionario con la siguiente estructura:
             - Asunto: El asunto del hilo (todos los mensajes comparten el mismo asunto).
-            - Mensajes: Lista de diccionarios con los mensajes. Se incluyen el remitente, los destinatarios y el contenido del mensaje"""
+            - Mensajes: Lista de diccionarios con los mensajes. Se incluyen el remitente, los destinatarios y el contenido completo del mensaje"""
     
-    try:
-        data = read_threads.view_full_thread(service, thread_id)
-        return {"hilo": data}
-    except Exception as e:
-        return {"error": str(e)}
+    data = read_threads.view_full_thread(service, thread_id)
+    return data
 
 @mcp.tool()
 async def obtener_message_ids_y_adjuntos_de_hilo(
     thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")]
-) -> dict:
+) -> list[dict]:
     """Esta herramienta sirve para obtener los IDs de los mensajes de un hilo, así como si dichos mensajes contienen adjuntos.
     Returns:
-        dict: Diccionario con la siguiente estructura:
+        List[Dict]: Una lista de diccionarios donde cada diccionario contiene:
             - message_id: El ID del mensaje.
             - snippet: Snippet del mensaje. Útil para saber a qué mensaje se está haciendo referencia.
             - filenames: Nombre de los archivos (si los hubiera) adjuntados en el mensaje."""
 
-    try:
-        resultado = read_threads.get_messages_ids_and_atts_from_threads(service, thread_id)
-        return {"resultado": resultado}
-    except Exception as e:
-        return {"error": str(e)}
+    resultado = read_threads.get_messages_ids_and_atts_from_threads(service, thread_id)
+    return resultado
 ### LECTURA DE EMAILS ###
 #########################
 
@@ -91,16 +82,13 @@ async def enviar_email(
     Returns:
         dict: Un diccionario con el status del envío"""
     
-    try:
-        status = send_email(
-            service = service,
-            to = destinatario,
-            subject = asunto,
-            body = cuerpo
-        )
-        return {"status": status}
-    except Exception as e:
-        return {"error": str(e)}
+    status = send_email(
+        service = service,
+        to = destinatario,
+        subject = asunto,
+        body = cuerpo
+    )
+    return status
 ### ENVIO DE EMAILS ###
 #########################
 
@@ -117,17 +105,14 @@ async def responder_email(
         dict: Un diccionario con el status del envío
     """
 
-    try:
-        message_details = reply_emails.get_message_headers_RFC(service, thread_id)
-        status = reply_emails.reply_email(
-            service = service,
-            body = cuerpo,
-            thread_id = thread_id,
-            **message_details
-        )
-        return {"status": status}
-    except Exception as e:
-        return {"error": str(e)}
+    message_details = reply_emails.get_message_headers_RFC(service, thread_id)
+    status = reply_emails.reply_email(
+        service = service,
+        body = cuerpo,
+        thread_id = thread_id,
+        **message_details
+    )
+    return status
 ### RESUPUESTA A EMAILS ###
 ############################
 
@@ -143,14 +128,11 @@ async def crear_etiqeta(
     Returns:
         dict: Un diccionario con el status del envío"""
 
-    try:
-        body = {
-            "name": name
-        }
-        service.users().labels().create(userId="me", body=body).execute()
-        return {"status": "Se ha creado exitosamente la etiqueta"}
-    except Exception as e:
-        return {"error": f"Se ha producido el siguiente error al crear la etiqueta {name}: {str(e)}"}  
+    body = {
+        "name": name
+    }
+    service.users().labels().create(userId="me", body=body).execute()
+    return {"éxito": "Se ha creado exitosamente la etiqueta"}
 
 @mcp.tool()
 async def eliminar_etiqueta(
@@ -161,12 +143,9 @@ async def eliminar_etiqueta(
     Returns:
         dict: Un diccionario con el status del envío"""
 
-    try:
-        label_id = get_label_ids(service, [name])
-        service.users().labels().delete(userId="me", id=label_id)
-        return {"status": "Se ha eliminado exitosamente la etiqueta"}
-    except Exception as e:
-        return {"error": f"Se ha producido el siguiente error al eliminar la etiqueta {name}: {str(e)}"}
+    label_id = get_label_ids(service, [name])[0]
+    service.users().labels().delete(userId="me", id=label_id).execute()
+    return {"éxito": "Se ha eliminado exitosamente la etiqueta"}
 
 @mcp.tool()
 async def asignar_etiquetas_a_hilo(
@@ -178,35 +157,29 @@ async def asignar_etiquetas_a_hilo(
     Returns:
         dict: Un diccionario con el status del proceso"""
 
-    try:
-        label_ids = get_label_ids(service, labels)
-        body = {
-            "addLabelIds": label_ids
-        }
-        service.users().threads().modify(userId="me", id = thread_id, body = body).execute()
-        return {"status": "Se ha movido exitosamente el hilo a la etiqueta"}
-    except Exception as e:
-        return {"error": f"Se ha producido el siguiente error: {str(e)}"}
+    label_ids = get_label_ids(service, labels)
+    body = {
+        "addLabelIds": label_ids
+    }
+    service.users().threads().modify(userId="me", id = thread_id, body = body).execute()
+    return {"éxito": f"Se han asignado exitosamente las etiquetas {labels} al hilo"}
 
 @mcp.tool()
 async def quitar_etiquetas_a_hilo(
     thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")],
-        labels: Annotated[list[str], Field(description="Lista con los nombres de las etiquetas (tanto las por-defecto como las propias del usuario). Los nombres no distinguen entre minúsculas y mayúsculas", examples=[["unread"], ["spam", "<etiqueda_usuario>"]])]
+    labels: Annotated[list[str], Field(description="Lista con los nombres de las etiquetas (tanto las por-defecto como las propias del usuario). Los nombres no distinguen entre minúsculas y mayúsculas", examples=[["unread"], ["spam", "<etiqueda_usuario>"]])]
 ) -> dict:
     """Quita una o varias etiquetas a un hilo de conversación de Gmail específico
 
     Returns:
         dict: Un diccionario con el status del proceso"""
 
-    try:
-        label_ids = get_label_ids(service, labels)
-        body = {
-            "removeLabelIds": label_ids
-        }
-        service.users().threads().modify(userId="me", id = thread_id, body = body).execute()
-        return {"status": f"Se eliminado exitosamente el hilo de la etiqueta"}
-    except Exception as e:
-        return {"error": f"Se ha producido el siguiente error: {str(e)}"}
+    label_ids = get_label_ids(service, labels)
+    body = {
+        "removeLabelIds": label_ids
+    }
+    service.users().threads().modify(userId="me", id = thread_id, body = body).execute()
+    return {"status": f"Se han eliminado exitosamente las etiquetas {labels} del hilo"}
 ### MANEJO DE ETIQUETAS ###
 ############################
 
@@ -222,17 +195,14 @@ async def descargar_adjuntos(
     Returns:
         dict: Un diccionario con el status del proceso"""
 
-    try:
-        download_attachments(service, msg_id, ATTACHMENTS_PATH)
-        return {"status": "Archivos descargados exitosamente"}
-    except Exception as e:
-        return {"error": f"Se ha producido el siguiente error al descargar los archivos adjuntos: {str(e)}"}
+    download_attachments(service, msg_id, ATTACHMENTS_PATH)
+    return {"status": "Archivos descargados exitosamente"}
 ### DESCARGA DE ADJUNTOS ###
 ############################
 
 
 def main():
-    mcp.run(transport="streamable-http")
+    mcp.run(transport="stdio")
 
 if __name__ == "__main__":
     main()

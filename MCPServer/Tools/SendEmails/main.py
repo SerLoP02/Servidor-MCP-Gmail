@@ -8,6 +8,7 @@ import base64
 import os
 from time import sleep
 from ssl import SSLEOFError
+from email_validator import validate_email, EmailNotValidError
 
 def send_email(
     service: Resource, 
@@ -16,6 +17,19 @@ def send_email(
     body: str,
     attachment_path: str | None = None
 ) -> str:
+
+    tto = []
+    # Validamos que los emails sean válidos y existan (nos aseguramos que la LLM introduzca bien los correos electrónicos)
+    for recipient in to.split(","):
+        try:
+            recipient = recipient.strip()
+            valid = validate_email(recipient, check_deliverability=True)
+            to = valid.normalized
+            tto.append(to)
+        except EmailNotValidError as e:
+            logger.error(f"Se ha producido un error al enviar el correo a {recipient}: {str(e)}", exc_info=True)
+            raise ValueError(f"{recipient} no es un email válido: {str(e)}")
+    to = ",".join(tto)
     
     message = MIMEMultipart()
     message["to"] = to

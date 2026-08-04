@@ -3,7 +3,15 @@ from googleapiclient.discovery import Resource
 def get_label_ids(
     service: Resource,
     labels: list
-):
+) -> list:
+    """Esta función retorna los IDs de las etiquetas
+    
+    Args:
+        service: Objeto de servicio autenticado de la API de Gmail (googleapiclient).
+        labels: Lista con las etiquetas a las que se las quiere encontrar sus IDs.
+        
+    Returns:
+        List: Lista con los IDs de las etiquetas."""
     all_labels = service.users().labels().list(userId="me").execute().get("labels", [])
     
     label_map = {label["name"].lower(): label["id"] for label in all_labels}
