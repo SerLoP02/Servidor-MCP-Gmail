@@ -6,6 +6,7 @@ from pydantic import Field
 # Tools
 from gmail_config import init_gmail_service, CREDENTIALS_PATH, ATTACHMENTS_PATH
 from Tools.ReadThreads import main as read_threads
+from Tools.ReadThreads.utils import get_email_threads
 from Tools.SendEmails.main import send_email
 from Tools.ReplyEmails import main as reply_emails
 from Tools.Labels.main import get_label_ids
@@ -23,45 +24,54 @@ async def previsualizar_hilos(
     q: Annotated[str | None, Field(default=None, description="Consulta de búsqueda usando el formato nativo de Gmail. Por defecto es None (devuelve todo)", examples=["from:user@example.com is:unread", "<palabras clave> subject:urgente"])], 
     max_results: Annotated[int, Field(default=10, description="Número máximo de hilos de correo a recuperar. Debe estar entre 1 y 100", ge=1, le=100)]
 ) -> dict:
-    """Busca y previsualiza hilos de correo en Gmail. Ideal para buscar correos específicos antes de leer su contenido completo
+    """Busca y previsualiza hilos de correo en Gmail. Esta herramienta sirve para filtrar entre los correos e identificar los adecuados.
 
         Returns:
-            dict: Un diccionario donde cada elemento contiene:
-                - Thread_id: Identificador único del hilo (necesario para obtener el detalle completo)
-                - Asunto: El asunto del hilo
-                - N. mensajes: Cantidad total de mensajes en el hilo
-                - Participantes: Lista de correos electrónicos de los remitentes y destinatarios
-                - Snippets: Resúmenes de los mensajes del hilo"""    
+            dict: Un diccionario de lista, donde cada elemento de la lista contiene:
+                - Thread_id: El ID del hilo.
+                - Asunto: El asunto del hilo.
+                - Participantes: Participantes del hilo.
+                - Snippets: Snippets de todos los mensajes del hilo."""    
 
     try:
-        threads = read_threads.get_email_threads(service = service, q = q, max_results = max_results)
+        threads = get_email_threads(service = service, q = q, max_results = max_results)
         data = read_threads.preview_threads(service, threads)
         return {"hilos": data}
     except Exception as e:
         return {"error": str(e)}
 
 @mcp.tool()
-async def obtener_hilo_completo(
+async def leer_hilo_completo(
     thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")]
 ) -> dict:
-    """Recupera el contenido completo y los metadatos de todos los mensajes dentro de un hilo específico de Gmail 
+    """Recupera el contenido completo de todos los mensajes (ordenados de más antigüos a más recientes) dentro de un hilo específico de Gmail.
+    Usa esta herramienta cuando necesites leer el contenido entero de un hilo o algunos mensajes enteros de un hilo.
 
     Returns:
-        dict: Un diccionario con la estructura detallada del hilo:
-            - Thread_id: ID del hilo
-            - Asunto: Asunto del hilo
-            - Mensajes: Lista de diccionarios, donde cada mensaje contiene:
-                - msg_id: ID único del mensaje
-                - Remitente: Dirección de email del autor
-                - Destinatarios: Direcciones de email de los destinatarios
-                - Fecha: Fecha de envío
-                - Contenido: Cuerpo del mensaje limpio
-                - Tiene archivos: True si el mensaje incluye adjuntos
-                - Etiquetas: Etiquetas de Gmail aplicadas al mensaje"""
+        dict: Diccionario con la siguiente estructura:
+            - Asunto: El asunto del hilo (todos los mensajes comparten el mismo asunto).
+            - Mensajes: Lista de diccionarios con los mensajes. Se incluyen el remitente, los destinatarios y el contenido del mensaje"""
     
     try:
-        data = read_threads.get_thread_details(service, thread_id)
+        data = read_threads.view_full_thread(service, thread_id)
         return {"hilo": data}
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def obtener_message_ids_y_adjuntos_de_hilo(
+    thread_id: Annotated[str, Field(description="Identificador único del hilo (obtenido previamente mediante 'previsualizar_hilos')")]
+) -> dict:
+    """Esta herramienta sirve para obtener los IDs de los mensajes de un hilo, así como si dichos mensajes contienen adjuntos.
+    Returns:
+        dict: Diccionario con la siguiente estructura:
+            - message_id: El ID del mensaje.
+            - snippet: Snippet del mensaje. Útil para saber a qué mensaje se está haciendo referencia.
+            - filenames: Nombre de los archivos (si los hubiera) adjuntados en el mensaje."""
+
+    try:
+        resultado = read_threads.get_messages_ids_and_atts_from_threads(service, thread_id)
+        return {"resultado": resultado}
     except Exception as e:
         return {"error": str(e)}
 ### LECTURA DE EMAILS ###
@@ -126,7 +136,7 @@ async def responder_email(
 ############################
 @mcp.tool()
 async def crear_etiqeta(
-    name: Annotated[str, Field(description="Nombre de la etiqueta")]
+    name: Annotated[str, Field(description="Nombre exacto de la etiqueta")]
 ) -> dict:
     """Crea una etiqueta de Gmail
 
@@ -205,7 +215,7 @@ async def quitar_etiquetas_a_hilo(
 ############################
 @mcp.tool()
 async def descargar_adjuntos(
-    msg_id: Annotated[str, Field(description="ID del mensaje que contiene los archivos adjuntos")]
+    msg_id: Annotated[str, Field(description="ID del mensaje que contiene los archivos adjuntos (obtenido previamente mediante 'obtener_message_ids_y_adjuntos_de_hilo')")]
 ) -> dict:
     """Descarga todos los archivos adjuntos de un mensaje específico de Gmail
 
